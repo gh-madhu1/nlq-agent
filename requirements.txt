@@ -1,0 +1,16 @@
+langchain
+langchain-openai
+langchain-community
+sqlalchemy
+numpy
+sentence-transformers
+pydantic
+python-dotenv
+pandas
+transformers
+torch
+accelerate
+bitsandbytes
+fastapi
+uvicorn
+sse-starlette
