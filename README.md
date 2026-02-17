@@ -1,6 +1,6 @@
 # NL2SQL Agent
 
-An advanced agentic system that converts Natural Language Queries (NLQ) into SQL, executes them against a database, and provides natural language responses. Powered by a local **Qwen1.5-1.8B-Chat** model.
+An advanced agentic system that converts Natural Language Queries (NLQ) into SQL, executes them against a database, and provides natural language responses. Powered by a local **Llama-3.2-3B-Instruct** model.
 
 ## 🚀 Features
 
@@ -17,6 +17,23 @@ An advanced agentic system that converts Natural Language Queries (NLQ) into SQL
 
 The agent follows a strict, linear pipeline designed for accuracy and reliability:
 
+```mermaid
+graph TD
+    A[User Query] --> B{Needs Refinement?}
+    B -- Yes --> C[Refine Query - LLM]
+    B -- No --> D[Classify Intent & Safety]
+    C --> D
+    D --> E[Retrieve Relevant Schema - Vector Search]
+    E --> F[Create Query Plan - Deterministic]
+    F --> G[Generate SQL - LLM]
+    G --> H[Validate SQL - Syntax/Schema/Safety]
+    H -- Success --> I[Execute SQL]
+    H -- Failure --> J{Retries < 3?}
+    J -- Yes --> G
+    J -- No --> K[Return Error Response]
+    I --> L[Format Data & Final Answer]
+```
+
 1.  **Refine (Conditional)**: LLM-based cleanup (only if query is short, contains typos, or slang).
 2.  **Classify**: Deterministic Intent & Safety check.
 3.  **Retrieve Schema**: Vector search for the top most relevant tables.
@@ -28,7 +45,7 @@ The agent follows a strict, linear pipeline designed for accuracy and reliabilit
 
 ## 🛠️ Tech Stack
 
-- **LLM**: Qwen/Qwen1.5-1.8B-Chat (Local via 🤗 Transformers)
+- **LLM**: meta-llama/Llama-3.2-3B-Instruct (Local via 🤗 Transformers)
 - **Embeddings**: sentence-transformers/all-MiniLM-L6-v2
 - **Vector Store**: ChromaDB
 - **Orchestration**: LangChain
@@ -112,6 +129,28 @@ python3 -m unittest tests/test_agent_mock.py
 python3 -m unittest tests/test_llm_client.py
 ```
 
+## ⚡ Performance Optimization (vLLM)
+
+For high-throughput inference (especially in production or on Linux/GPU servers), it is recommended to use **vLLM**.
+
+### 1. Start a vLLM Server
+```bash
+python3 -m vllm.entrypoints.openai.api_server \
+    --model meta-llama/Llama-3.2-3B-Instruct \
+    --port 8000
+```
+
+### 2. Configure the Agent
+Set the following environment variables (or in a `.env` file):
+```bash
+VLLM_BASE_URL="http://localhost:8000/v1"
+```
+
+Initialize the agent with the `vllm` provider:
+```python
+llm = LLMClient(model_provider="vllm")
+```
+
 ## 📂 Project Structure
 
 ```
@@ -127,7 +166,7 @@ python3 -m unittest tests/test_llm_client.py
 │   └── formatter.py         # Response formatting
 ├── utils/                   # Utilities
 │   ├── db_manager.py        # Database interactions
-│   ├── llm_client.py        # LLM wrapper (Local Qwen1.5)
+│   ├── llm_client.py        # LLM wrapper (Local Llama 3.2)
 │   ├── vector_store.py      # Vector DB operations
 │   ├── init_db.py           # DB logic
 │   └── index_schema.py      # Schema indexing

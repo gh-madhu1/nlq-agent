@@ -14,3 +14,6 @@ bitsandbytes
 fastapi
 uvicorn
 sse-starlette
+
+# Optional: vLLM for high-performance inference (Linux/NVIDIA recommended)
+# vllm

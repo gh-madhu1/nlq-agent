@@ -8,37 +8,53 @@ class TestLLMClient(unittest.TestCase):
     def setUp(self):
         """Clear the singleton cache before each test."""
         llm_module._llm_cache.clear()
-    @patch('utils.llm_client.HuggingFacePipeline.from_model_id')
+    @patch('utils.llm_client.hf_pipeline')
+    @patch('utils.llm_client.AutoModelForCausalLM.from_pretrained')
+    @patch('utils.llm_client.AutoTokenizer.from_pretrained')
+    @patch('utils.llm_client.GenerationConfig.from_pretrained')
     @patch('utils.llm_client._detect_device')
-    def test_local_model_initialization_mps(self, mock_detect, mock_pipeline):
+    def test_local_model_initialization_mps(self, mock_detect, mock_gen_config, mock_tokenizer, mock_model, mock_pipeline):
         """Test local model init path for MPS (Apple Silicon)."""
         import torch
         mock_detect.return_value = ("mps", torch.float16)
+        
+        # Setup mocks to avoid real loading
+        mock_tokenizer.return_value = MagicMock()
+        mock_model.return_value = MagicMock()
+        mock_gen_config.return_value = MagicMock()
 
-        client = LLMClient(model_provider="local", model_name="Qwen/Qwen2.5-1.5B-Instruct")
+        client = LLMClient(model_provider="local", model_name="meta-llama/Llama-3.2-3B-Instruct")
 
-        args, kwargs = mock_pipeline.call_args
-        self.assertEqual(kwargs['model_id'], "Qwen/Qwen2.5-1.5B-Instruct")
-        self.assertEqual(kwargs['task'], "text-generation")
-        self.assertFalse(kwargs['pipeline_kwargs']['return_full_text'])
-        self.assertTrue(kwargs['model_kwargs']['low_cpu_mem_usage'])
-        self.assertTrue(kwargs['model_kwargs']['use_cache'])
-        # MPS should NOT have quantization_config
-        self.assertNotIn('quantization_config', kwargs['model_kwargs'])
-        self.assertEqual(kwargs['model_kwargs']['torch_dtype'], torch.float16)
+        # Verify tokenizer was loaded
+        mock_tokenizer.assert_called_once_with("meta-llama/Llama-3.2-3B-Instruct")
+        
+        # Verify model was loaded with correct kwargs
+        args, kwargs = mock_model.call_args
+        self.assertEqual(kwargs['torch_dtype'], torch.float16)
+        self.assertEqual(kwargs['device_map'], 'mps')
+
+        # Verify pipeline was created
+        self.assertTrue(mock_pipeline.called)
         self.assertIsNotNone(client.get_llm())
 
-    @patch('utils.llm_client.HuggingFacePipeline.from_model_id')
+    @patch('utils.llm_client.hf_pipeline')
+    @patch('utils.llm_client.AutoModelForCausalLM.from_pretrained')
+    @patch('utils.llm_client.AutoTokenizer.from_pretrained')
+    @patch('utils.llm_client.GenerationConfig.from_pretrained')
     @patch('utils.llm_client._detect_device')
-    def test_local_model_initialization_cuda(self, mock_detect, mock_pipeline):
+    def test_local_model_initialization_cuda(self, mock_detect, mock_gen_config, mock_tokenizer, mock_model, mock_pipeline):
         """Test local model init path for CUDA — should use quantization."""
         import torch
         mock_detect.return_value = ("cuda", torch.float16)
+        
+        mock_tokenizer.return_value = MagicMock()
+        mock_model.return_value = MagicMock()
+        mock_gen_config.return_value = MagicMock()
 
-        client = LLMClient(model_provider="local", model_name="Qwen/Qwen2.5-1.5B-Instruct")
+        client = LLMClient(model_provider="local", model_name="meta-llama/Llama-3.2-3B-Instruct")
 
-        args, kwargs = mock_pipeline.call_args
-        self.assertIn('quantization_config', kwargs['model_kwargs'])
+        args, kwargs = mock_model.call_args
+        self.assertIn('quantization_config', kwargs)
 
     @patch('utils.llm_client.ChatOpenAI')
     @patch('os.getenv')

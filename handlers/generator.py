@@ -26,8 +26,9 @@ class SQLGenerator:
         """Generate SQL from natural language, strictly following the query plan."""
 
         if not plan:
-            # Fallback if no plan
-            prompt = f"Write a SQLite SELECT query for: {query}\nSQL:"
+            response = self.llm_client.call(
+                prompt=f"Write a SQLite SELECT query for: {query}"
+            )
         else:
             # Build schema for ONLY the tables in the plan
             schema_lines = []
@@ -93,54 +94,41 @@ class SQLGenerator:
             suggested_columns = plan.get("select_columns", ["*"])
             columns_hint = ", ".join(suggested_columns) if suggested_columns != ["*"] else "appropriate columns"
 
-            prompt = f"""Generate ONLY a valid SQLite SELECT query. No explanations or comments.
+            # Construct the system instructions
+            system_prompt = f"""You are a specialized SQL Generator. Generate ONLY a valid SQLite SELECT query. No explanations or comments.
 
 SCHEMA (use ONLY these tables and columns):
 {schema_str}
 
-USER QUESTION: "{query}"
+CRITICAL RULES - FOLLOW EXACTLY:
+1. Do NOT add any WHERE clause unless shown in REQUIRED STRUCTURE below
+2. Do NOT add any JOIN unless shown in REQUIRED STRUCTURE below  
+3. Do NOT add any GROUP BY unless shown in REQUIRED STRUCTURE below
+4. Do NOT add any ORDER BY unless shown in REQUIRED STRUCTURE below
+5. Use ONLY the tables and columns from the SCHEMA above
+6. Use table.column format for all columns (e.g., users.email, products.name)
+7. If specific columns are suggested, use ONLY those columns
+8. Do NOT use SELECT * if specific columns are available
+"""
+            # Construct the user instructions and placeholders
+            user_prompt = f"""USER QUESTION: "{query}"
 
 REQUIRED STRUCTURE (DO NOT MODIFY):
 {template}
 
 YOUR TASK:
-Fill in the SELECT <columns> part ONLY. Use these columns: {columns_hint}
+Generate the complete SQLite SQL query. Use these columns: {columns_hint}
+"""
+            if error_feedback:
+                user_prompt += f"\n\nPREVIOUS ERROR:\n{error_feedback}\nGenerate a DIFFERENT, correct query."
 
-CRITICAL RULES - FOLLOW EXACTLY:
-1. Do NOT add any WHERE clause unless shown in REQUIRED STRUCTURE above
-2. Do NOT add any JOIN unless shown in REQUIRED STRUCTURE above  
-3. Do NOT add any GROUP BY unless shown in REQUIRED STRUCTURE above
-4. Do NOT add any ORDER BY unless shown in REQUIRED STRUCTURE above
-5. Use ONLY the tables and columns from the SCHEMA above
-6. Use table.column format for all columns (e.g., users.email, products.name)
-7. If specific columns are suggested, use ONLY those columns
-8. Do NOT use SELECT * if specific columns are available
-
-EXAMPLES:
-- If columns hint is "users.email": SELECT users.email {from_clause}
-- If columns hint is "products.name, products.price": SELECT products.name, products.price {from_clause}
-- If columns hint is "COUNT(*)": SELECT COUNT(*) {from_clause}
-- If columns hint is "products.category, COUNT(*)": SELECT products.category, COUNT(*) {from_clause}
-
-COMMON MISTAKES TO AVOID:
-❌ Adding WHERE when not in REQUIRED STRUCTURE
-❌ Adding JOIN when not in REQUIRED STRUCTURE
-❌ Using SELECT * when specific columns are suggested
-❌ Using columns not in the SCHEMA
-❌ Changing the FROM/JOIN/WHERE/GROUP BY/ORDER BY clauses
-
-Generate the complete SQL query now:
-SQL:"""
-
-        if error_feedback:
-            prompt += f"\n\nPREVIOUS ERROR:\n{error_feedback}\nGenerate a DIFFERENT, correct query.\n\nSQL:"
-
-        response = self.llm_client.call(
-            prompt,
-            temperature=0.0,
-            max_tokens=200,
-            stop=["\n\n", "Question:", "SCHEMA:", "RULES:"]
-        )
+            response = self.llm_client.call(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                temperature=0.0,
+                max_tokens=200,
+                stop=["\n\n", "Question:", "SCHEMA:", "RULES:"]
+            )
 
         sql = self._extract_sql(response)
         logger.info(f"Generated SQL: {sql}")

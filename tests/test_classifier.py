@@ -8,7 +8,7 @@ from utils.llm_client import LLMClient
 from handlers.intent_safety import IntentSafetyClassifier
 
 # Initialize
-llm = LLMClient(model_provider="local", model_name="Qwen/Qwen2.5-3B-Instruct")
+llm = LLMClient(model_provider="local", model_name="meta-llama/Llama-3.2-3B-Instruct")
 classifier = IntentSafetyClassifier(llm)
 
 # Test queries
